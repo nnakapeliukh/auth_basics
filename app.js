@@ -8,6 +8,7 @@ const LocalStrategy = require("passport-local").Strategy;
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 const credentialString = require("./credentials");
+const bcrypt = require("bcryptjs");
 
 const mongoDb = credentialString.credentials;
 mongoose.connect(mongoDb);
@@ -33,9 +34,12 @@ passport.use(
       if (!user) {
         return done(null, false, { message: "Incorrect username" });
       };
-      if (user.password !== password) {
-        return done(null, false, { message: "Incorrect password" });
-      };
+      
+      const match = await bcrypt.compare(password, user.password);
+      if (!match) {
+        // passwords do not match!
+        return done(null, false, { message: "Incorrect password" })
+      }
       return done(null, user);
     } catch(err) {
       return done(err);
@@ -79,12 +83,20 @@ app.get("/log-out", (req, res, next) => {
 // inputs not sanitized and stored as plain text, danger, danger!!!
 app.post("/sign-up", async (req, res, next) => {
   try {
-    const user = new User({
-      username: req.body.username,
-      password: req.body.password
+    
+    bcrypt.hash(req.body.password, 10, async (err, hashedPassword) => {
+      // if err, do something
+      if (err) throw(err);
+      // otherwise, store hashedPassword in DB
+      const user = new User({
+        username: req.body.username,
+        password: hashedPassword,
+      });
+
+      const result = await user.save();
+      res.redirect("/");
     });
-    const result = await user.save();
-    res.redirect("/");
+    
   } catch(err) {
     return next(err);
   };
